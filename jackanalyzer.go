@@ -40,6 +40,7 @@ func main() {
 
 func testTokenizer(infile *os.File, outfile *os.File) {
 	writer := bufio.NewWriter(outfile)
+	defer writer.Flush()
 	jt := jacktokenizer.NewTokenizer(infile)
 	for jt.HasMoreTokens() {
 		jt.Advance()

@@ -92,7 +92,6 @@ var symbols = map[rune]bool{
 
 type Tokenizer struct {
 	file        *os.File
-	scanner     *bufio.Scanner
 	reader      *bufio.Reader
 	currentRune rune
 	tokenType   Token
@@ -100,30 +99,60 @@ type Tokenizer struct {
 }
 
 func NewTokenizer(file *os.File) *Tokenizer {
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanRunes)
 	reader := bufio.NewReader(file)
-	t := Tokenizer{file: file, scanner: scanner, reader: reader}
+	t := Tokenizer{file: file, reader: reader}
 	return &t
 }
 
 func (t *Tokenizer) HasMoreTokens() bool {
-	// return t.scanner.Scan()
-	_, _, err := t.reader.ReadRune()
-	if err == nil {
-		t.reader.UnreadRune()
+	var err error
+	t.currentRune, _, err = t.reader.ReadRune()
+
+	// Skip whitespace
+	for unicode.IsSpace(t.currentRune) {
+		t.currentRune, _, err = t.reader.ReadRune()
 	}
+
+	// Skip a comment then advance again
+	if t.currentRune == '/' {
+		t.skipComments()
+		return t.HasMoreTokens()
+	}
+
 	return err == nil
+}
+
+func (t *Tokenizer) skipComments() {
+	next, err := t.reader.Peek(1)
+	nextRune := rune(next[0])
+	if err == nil {
+		switch nextRune {
+		case '/':
+			t.reader.ReadRune()
+			t.currentRune, _, _ = t.reader.ReadRune()
+			for t.currentRune != '\n' {
+				t.currentRune, _, _ = t.reader.ReadRune()
+
+			}
+
+		case '*':
+			t.reader.ReadRune()
+			r1, _, _ := t.reader.ReadRune()
+			t.currentRune, _, _ = t.reader.ReadRune()
+			for !(r1 == '*' && t.currentRune == '/') {
+				r1 = t.currentRune
+				t.currentRune, _, _ = t.reader.ReadRune()
+
+			}
+
+		}
+	}
 }
 
 func (t *Tokenizer) Advance() {
 	var err error
 	tokenNotFound := true
 	for tokenNotFound {
-		t.currentRune, _, err = t.reader.ReadRune()
-		if err != nil {
-			break
-		}
 		tokenNotFound = false
 		if isSymbol(t.currentRune) {
 			t.tokenType = SYMBOL
@@ -137,6 +166,10 @@ func (t *Tokenizer) Advance() {
 			t.scanWord()
 		} else {
 			tokenNotFound = true
+			t.currentRune, _, err = t.reader.ReadRune()
+			if err != nil {
+				break
+			}
 		}
 	}
 }
@@ -166,7 +199,6 @@ func isQuote(text rune) bool {
 
 func (t *Tokenizer) scanString() {
 	var strBuilder s.Builder
-	strBuilder.WriteRune(t.currentRune)
 	for {
 		t.currentRune, _, _ = t.reader.ReadRune()
 		if isQuote(t.currentRune) {
