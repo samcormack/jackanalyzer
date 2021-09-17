@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"io/ioutil"
+	"jackanalyzer/compilationengine"
 	"jackanalyzer/jacktokenizer"
 	"log"
 	"os"
@@ -18,24 +20,37 @@ func main() {
 	}
 
 	fname := s.TrimSuffix(arg, ".jack")
-	var outfileName string
+
 	if fname == arg {
-		outfileName = filepath.Join(fname, filepath.Base(fname)) + "T.xml"
-	} else {
-		outfileName = fname + "T.xml"
+		// Run on files in directory
+		files, err := ioutil.ReadDir(fname)
+		check(err)
+		for _, file := range files {
+			if filepath.Ext(file.Name()) == ".jack" {
+				analyzeToXML(filepath.Join(arg, file.Name()))
+			}
+		}
+	} else if filepath.Ext(arg) == ".jack" {
+		analyzeToXML(filepath.Clean(arg))
 	}
 
-	// Create output file and writer
+}
+
+func analyzeToXML(filename string) {
+	outfileName := s.TrimSuffix(filename, filepath.Ext(filename))
+	outfileName = outfileName + ".xml"
+
 	outfile, err := os.Create(outfileName)
 	check(err)
 	defer outfile.Close()
 
-	infile, err := os.Open(arg)
+	infile, err := os.Open(filename)
 	check(err)
 	defer infile.Close()
 
-	testTokenizer(infile, outfile)
-
+	engine := compilationengine.NewCompilationEngine(infile, outfile)
+	defer engine.Finish()
+	engine.CompileClass()
 }
 
 func testTokenizer(infile *os.File, outfile *os.File) {
